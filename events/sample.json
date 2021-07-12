@@ -1,0 +1,20 @@
+{
+    "Records": [
+        {
+            "messageId": "123",
+            "receiptHandle": "123",
+            "body": "{\"Records\":[{\"eventVersion\":\"2.1\",\"eventSource\":\"aws:s3\",\"awsRegion\":\"us-west-2\",\"eventTime\":\"2020-11-04T02:46:22.942Z\",\"eventName\":\"ObjectCreated:Put\",\"userIdentity\":{\"principalId\":\"AWS:1234\"},\"requestParameters\":{\"sourceIPAddress\":\"123.123.123.123\"},\"responseElements\":{\"x-amz-request-id\":\"123\",\"x-amz-id-2\":\"123/123++123+Q3V\"},\"s3\":{\"s3SchemaVersion\":\"1.0\",\"configurationId\":\"sendDicomLambda\",\"bucket\":{\"name\":\"hemande-dicom2\",\"ownerIdentity\":{\"principalId\":\"A3AXH9U13XEYNR\"},\"arn\":\"arn:aws:s3:::hemande-dicom2\"},\"object\":{\"key\":\"MammoTomoUPMC_Case14.tar.bz2\",\"size\":525626,\"eTag\":\"f2980261fb295941c8f778508fbd28b8\",\"sequencer\":\"005FA216010932008E\"}}}]}",
+            "attributes": {
+                "ApproximateReceiveCount": "1",
+                "SentTimestamp": "1604457986025",
+                "SenderId": "AIDAJFWZWTE5KRAMGW5A2",
+                "ApproximateFirstReceiveTimestamp": "1604457986026"
+            },
+            "messageAttributes": {},
+            "md5OfBody": "9907ff99b4cb555b953b5c7cc01659ad",
+            "eventSource": "aws:sqs",
+            "eventSourceARN": "arn:aws:sqs:us-west-2:123:SQS",
+            "awsRegion": "us-west-2"
+        }
+    ]
+  }

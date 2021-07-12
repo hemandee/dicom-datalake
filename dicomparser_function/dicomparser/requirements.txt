@@ -1,0 +1,5 @@
+pydicom==2.0.0
+pandas==1.1.4
+awswrangler==1.9.6
+ptvsd==4.3.2
+smart_open

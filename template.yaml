@@ -1,0 +1,176 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  dicomParser
+
+  Sample SAM Template for dicomParser
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 300
+
+Parameters:
+  SourceBucket:
+    Type: "String"
+    Description: S3 Bucket that Contains Dicom Files for permissions
+  GlueDatabaseInput:
+    Type: "String"
+    Default: "dicom_metadata"
+    Description: "Name of Glue Database"
+  DestBucketKMS:
+    Type: "String"
+    Description: "KMS ARN for S3 Server Side Encryption for Dest Bucket"
+
+  GlueCatalogKMSKey:
+    Type: "String"
+    Description: "(Optional)Enter ARN of KMS Key used in Data Catalog Settings if not leave blank"
+    Default: ""    
+    
+Conditions:
+  CreateGlueCatalogKMSKey: !Not [!Equals [!Ref GlueCatalogKMSKey, ""]]
+    
+Resources:
+  DicomFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: dicomparser_function/dicomparser
+      Handler: app.lambda_handler
+      Runtime: python3.8
+      MemorySize: 256
+      Environment: 
+        Variables:
+          PTVSD: "FALSE"
+          DEST_BUCKET: !Ref DestBucket
+          DEST_BUCKET_REGION: !Ref "AWS::Region"
+      Events:
+        MySQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt MySqsQueue.Arn
+            BatchSize: 1
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref DestBucket
+        - S3ReadPolicy:
+            BucketName: !Ref SourceBucket
+        - Statement:
+            - Sid: KMSDicomLambda
+              Effect: Allow
+              Action:
+                - "kms:Encrypt"
+                - "kms:GenerateDataKey"
+              Resource: !Ref DestBucketKMS        
+  MySqsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      # Needs to be equal or greater than Lambda Timeout
+      VisibilityTimeout: 300
+      QueueName: !Sub ${AWS::StackName}-DicomQueue
+  SQSQueuePolicy:
+    Type: 'AWS::SQS::QueuePolicy'
+    Properties:
+      PolicyDocument:
+        Id: 'MyQueuePolicy'
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'Statement-id'
+            Effect: 'Allow'
+            Principal:
+              Service: "s3.amazonaws.com"
+            Action: 'sqs:SendMessage'
+            Resource:
+              Fn::GetAtt: [ MySqsQueue, Arn ]
+      Queues:
+        - Ref: MySqsQueue
+
+  DestBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref DestBucketKMS
+  
+  GlueCrawlerRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "glue.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole"
+      Policies:
+        - PolicyName: "DicomMetadataBucket"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                Resource: !Sub '${DestBucket.Arn}/*' 
+
+  GlueCatalogKMSPolicy:
+    Type: "AWS::IAM::Policy"
+    Condition: CreateGlueCatalogKMSKey
+    Properties:
+      Roles: 
+        - !Ref GlueCrawlerRole
+      PolicyName: "GlueCrawlerKMSPolicy"
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action:
+              - "kms:GenerateDataKey"
+              - "kms:Decrypt"
+              # - "kms:Encrypt"
+            Resource: !Ref GlueCatalogKMSKey                  
+
+  GlueCrawler:
+    Type: "AWS::Glue::Crawler"
+    Properties:
+      Name: "dicom-glue-crawler"
+      Role: !GetAtt GlueCrawlerRole.Arn
+      DatabaseName: !Ref GlueDatabase
+      Targets:
+        S3Targets:
+          - Path: !Ref DestBucket
+      SchemaChangePolicy:
+        DeleteBehavior: "DEPRECATE_IN_DATABASE"
+        UpdateBehavior: "UPDATE_IN_DATABASE"  
+      Configuration: "{\"Version\":1.0,\"Grouping\":{\"TableGroupingPolicy\":\"CombineCompatibleSchemas\"}}"
+
+  GlueDatabase:
+    Type: "AWS::Glue::Database"
+    Properties:
+      CatalogId: !Ref "AWS::AccountId"
+      DatabaseInput:
+        Name: !Ref GlueDatabaseInput
+        Description: "Location of Dicom Metadata"
+
+
+
+ 
+
+Outputs:
+  DicomFunction:
+    Description: "DicomFunction Lambda Function ARN"
+    Value: !GetAtt DicomFunction.Arn
+  DicomBucket:
+    Description: "Dicom Source BucketName"
+    Value: !Ref SourceBucket  
+  DicomSQSArn:
+    Description: "SQS ARN"
+    Value: !GetAtt MySqsQueue.Arn
+  DestBucket:
+    Description: "S3 Dicom Metadata Bucket"
+    Value: !GetAtt DestBucket.Arn    
